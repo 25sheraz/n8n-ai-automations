@@ -1,0 +1,183 @@
+{
+  "name": "FoodMate - Calorie Scan API",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "calorie-scan",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -384,
+        352
+      ],
+      "id": "736ad77e-ed55-43a3-9190-bf449edc75a1",
+      "name": "Food Scan Webhook"
+    },
+    {
+      "parameters": {
+        "resource": "image",
+        "operation": "analyze",
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-5.4",
+          "mode": "list",
+          "cachedResultName": "GPT-5.4"
+        },
+        "text": "=You are an expert AI Nutrition, Food Recognition, and Diet Assistant.\n\nYour primary responsibility is to accurately analyze uploaded food images, identify the dish, recognize every visible ingredient, and estimate nutrition information.\n\nThe user may provide:\n- Only a food image.\n- A food image with ingredient names.\n- A food image with ingredient names and weights.\n- A food image with a partial description.\n- A food image with additional notes.\n\nFollow these rules strictly:\n\n1. Carefully analyze the uploaded food image.\n\n2. Identify the primary dish shown in the image.\n\n3. Return the following information about the dish:\n   - English name\n   - Roman English local name (for example: Rice → Chawal, Chicken → Murgh, Lentils → Daal)\n   - Cuisine or origin (Pakistani, Indian, Chinese, Italian, Mexican, American, Turkish, Japanese, Thai, Middle Eastern, etc.)\n   - Meal category (Breakfast, Lunch, Dinner, Snack, Dessert, Beverage)\n\n4. Detect every visible food ingredient as accurately as possible.\n\n5. If the user provides ingredient names, always prioritize the user's information over image detection.\n\n6. If the user provides only some ingredients, detect the remaining visible ingredients from the image.\n\n7. Never remove a clearly visible ingredient simply because the user forgot to mention it.\n\n8. If the user provides the weight for an ingredient, use that weight exactly as provided.\n\n9. If the user does not provide the weight, estimate a typical serving weight for that ingredient based on common serving sizes.\n\n10. The estimated weight is only a reference and should never be considered the actual weight of the food shown in the image.\n\n11. Calculate estimated nutrition using the returned weight.\n    If the weight source is \"user\", calculate nutrition using the user-provided weight.\n    If the weight source is \"estimated\", calculate nutrition using the estimated weight.\n\n12. For every ingredient return:\n   - English name\n   - Roman English name\n   - Confidence percentage (0-100)\n   - Weight (grams)\n   - Weight source (\"user\" or \"estimated\")\n   - Nutrition:\n        - Calories (kcal)\n        - Protein (g)\n        - Carbohydrates (g)\n        - Fat (g)\n        - Fibre (g)\n\n13. If an ingredient cannot be identified confidently, return:\n   - English name: \"Unknown\"\n   - Roman English name: \"Unknown\"\n\n14. Never invent ingredients that are not visible in the image and were not mentioned by the user.\n\n15. If the user's description conflicts with the image, use the user's information only for the ingredients they explicitly mention. Continue detecting any remaining visible ingredients from the image.\n\n16. Return ONLY valid JSON.\n\n17. Do NOT return markdown, explanations, comments, or any text outside the JSON.\n\nReturn the response in exactly this format:\n\n{\n  \"success\": true,\n  \"dish\": {\n    \"english_name\": \"\",\n    \"roman_name\": \"\",\n    \"cuisine\": \"\",\n    \"meal_category\": \"\"\n  },\n  \"ingredients\": [\n    {\n      \"english_name\": \"\",\n      \"roman_name\": \"\",\n      \"confidence\": 99,\n      \"weight_g\": 150,\n      \"weight_source\": \"estimated\",\n      \"nutrition\": {\n        \"calories\": 248,\n        \"protein\": 46.5,\n        \"carbohydrates\": 0,\n        \"fat\": 5.4,\n        \"fibre\": 0\n      }\n    }\n  ]\n}",
+        "inputType": "base64",
+        "binaryPropertyName": "image",
+        "options": {
+          "detail": "high",
+          "maxTokens": 1200
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.3,
+      "position": [
+        0,
+        176
+      ],
+      "id": "fbb7706f-18bd-4ee3-849c-627f8db97af2",
+      "name": "Analyze Food Image"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "let out = $input.item.json;\nlet raw = \"\";\nif (Array.isArray(out)) {\n  const msg = out.find(o => o.type === 'message') || out[0];\n  const contentItem = msg?.content?.find(c => c.type === 'output_text') || msg?.content?.[0];\n  raw = contentItem?.text ?? '';\n} else {\n  raw = out.content ?? out.text ?? '';\n}\nraw = String(raw).trim().replace(/^```json/i, \"\").replace(/^```/, \"\").replace(/```$/, \"\").trim();\nlet parsed;\ntry {\n  parsed = JSON.parse(raw);\n} catch (e) {\n  parsed = { error: \"Could not parse AI response as JSON\", raw };\n}\nreturn { json: parsed };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        304,
+        176
+      ],
+      "id": "06e188cf-05c5-4d47-9447-e2ebcb5100fa",
+      "name": "Parse Nutrition JSON"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        608,
+        176
+      ],
+      "id": "4aa6e2ae-a7ee-45cd-98cf-2b228b7b5c76",
+      "name": "Respond With Nutrition"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.headers['x-api-key'] }}",
+              "rightValue": "YOUR_API_KEY",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              },
+              "id": "4f7c7451-82e2-46c8-8aad-c6654f15b998"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -160,
+        352
+      ],
+      "id": "eb71960d-cd87-45a6-a86a-3458e23a9f5a",
+      "name": "Check API Token"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"error\": \"Unauthorized - missing or invalid API token\" } }}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        64,
+        432
+      ],
+      "id": "584939d3-3fe6-4650-a14b-37759bbd2e45",
+      "name": "Respond Unauthorized"
+    }
+  ],
+  "connections": {
+    "Food Scan Webhook": {
+      "main": [
+        [
+          {
+            "node": "Check API Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Food Image": {
+      "main": [
+        [
+          {
+            "node": "Parse Nutrition JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Nutrition JSON": {
+      "main": [
+        [
+          {
+            "node": "Respond With Nutrition",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check API Token": {
+      "main": [
+        [
+          {
+            "node": "Analyze Food Image",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Unauthorized",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

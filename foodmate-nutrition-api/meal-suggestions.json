@@ -1,0 +1,180 @@
+{
+  "name": "FoodMate - Meal Suggestions API",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "meal-suggestions",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -672,
+        160
+      ],
+      "id": "49ccbf38-e159-47a4-8e35-bde837df858b",
+      "name": "Webhook"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "89a24367-f7a5-4971-bb7e-6c30066ac0bb",
+              "leftValue": "={{$json.headers[\"x-api-key\"]}}",
+              "rightValue": "YOUR_API_KEY",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -464,
+        160
+      ],
+      "id": "14d8238a-e94f-48c1-8904-4d91a4e62ca2",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"error\": \"Unauthorized - missing or invalid API token\" } }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        -480,
+        416
+      ],
+      "id": "301078e0-3e26-440e-bff1-6b36fd785774",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.body }}",
+        "options": {
+          "systemMessage": "The user's profile may contain complete or partial information.\n\nUse all available profile information to generate the best meal recommendations.\n\nIf optional information is missing (such as allergies, disliked foods, preferred meal type, activity level, or calorie target), simply ignore those fields.\n\nIf the daily calorie target is missing, estimate it based on the user's age, gender, height, weight, goal, and activity level.\n\nOnly return an error if all essential profile information is missing.\n\nEssential profile fields are:\n- Age\n- Gender\n- Height\n- Weight\n- Goal\n\nFollow these rules strictly:\n\n1. Recommend meals that best match the user's calorie target and fitness goal.\n\n2. Never recommend foods containing ingredients listed in the user's allergies.\n\n3. If the user provides disliked foods, avoid recommending meals containing those foods. If no disliked foods are provided, ignore this rule.\n\n4. Respect the user's dietary preference.\n\n5. Recommend EXACTLY 5 different meal options.\n\n6. Ensure the recommendations are diverse. Do not recommend nearly identical meals.\n\n7. Prefer meals from the user's local cuisine whenever appropriate, but you may also recommend healthy international dishes if they better fit the user's nutritional needs.\n\n8. For each meal provide:\n   - Dish name\n   - Cuisine\n   - Meal category (Breakfast, Lunch, Dinner, Snack)\n   - Short description\n   - Complete list of ingredients\n   - Estimated quantity of each ingredient (grams)\n   - Total nutritional information for one serving:\n       - Calories (kcal)\n       - Protein (g)\n       - Carbohydrates (g)\n       - Fat (g)\n       - Fibre (g)\n   - A short explanation of why this meal is suitable for the user's goal.\n\n9. The nutrition values should represent one complete serving of the meal.\n\n10. Return ONLY valid JSON.\n\n11. Do NOT include markdown, explanations, comments, or text outside the JSON.\n\nReturn the response in exactly this format:\n\n{\n  \"success\": true,\n  \"recommendations\": [\n    {\n      \"dish_name\": \"\",\n      \"cuisine\": \"\",\n      \"meal_category\": \"\",\n      \"description\": \"\",\n      \"ingredients\": [\n        {\n          \"name\": \"\",\n          \"quantity_g\": 0\n        }\n      ],\n      \"nutrition\": {\n        \"calories\": 0,\n        \"protein\": 0,\n        \"carbohydrates\": 0,\n        \"fat\": 0,\n        \"fibre\": 0\n      },\n      \"reason\": \"\"\n    }\n  ]\n}"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        -96,
+        80
+      ],
+      "id": "404d4c1d-9d19-443d-ae00-78f2cf48db07",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-5.4-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-5.4-mini"
+        },
+        "builtInTools": {},
+        "options": {
+          "maxTokens": 2500
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        -96,
+        368
+      ],
+      "id": "ce9e9e50-8359-47fa-8f31-4379501b032c",
+      "name": "OpenAI Chat Model"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.output }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        256,
+        80
+      ],
+      "id": "ef3bf8a6-c2e6-47b5-b6fa-eacf07f092f2",
+      "name": "Respond to Webhook1"
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

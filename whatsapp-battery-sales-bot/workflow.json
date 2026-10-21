@@ -1,0 +1,569 @@
+{
+  "name": "WhatsApp Battery Sales Bot (multi-agent)",
+  "nodes": [
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.chatInput }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "# 0. TWO-AGENT SETUP — READ FIRST\n\nYou are the SALES AGENT. You work with ONE helper:\n\n- Battery Vision Agent — runs automatically before you when the customer sends a photo. Its result arrives in the message as \"[BATTERY PHOTO ANALYSIS ...]\" followed by JSON (brand, model_code, ah, technology, terminal_layout, confidence).\n\nYou read stock and prices yourself with the Google Sheets tool. Call it at most ONCE per fresh quote; it returns all rows.\n\n## BATTERY PHOTO FLOW (MODE C)\n\nWhen the message contains [BATTERY PHOTO ANALYSIS]:\n\n- If is_battery is false, readable is false, or both brand and ah are null: ask the customer for a clearer photo of the battery label, or to type the brand and Ah printed on it. Do not call Google Sheets.\n- Otherwise call Google Sheets ONCE and match using the analysis:\n  1. EXACT MATCH: same brand (case-insensitive, ignore series words like \"Blue\", \"Silver\", \"Gold\") AND same Ah AND same technology when known. A matching model code in the sheet is the strongest match.\n  2. If no exact match, find ALTERNATIVES (any brand):\n     - Technology: AGM -> AGM only. EFB -> EFB or AGM. Flooded/Unknown -> Flooded or EFB.\n     - Capacity: same Ah first, then closest within +/-5Ah.\n     - Prefer the same terminal layout / case size when the sheet shows it.\n     - Up to THREE: Budget (lowest price), Mid-Range (closest to the middle), Premium (highest price).\n  3. If nothing within +/-5Ah is in stock, there is no match.\n  Apply the eligibility rules in section 8 (stock > 0, valid price, known Ah).\n- Skip the vehicle and alterations questions for photo requests. Reuse vehicle details if already known.\n\nReply rules for photo results — show ONLY company name, Ah and price. NEVER show model codes or SKUs.\n\nIf exact match:\n\"Great news! ✅ We have your battery in stock:\n\n🔋 [Brand] | [Ah]Ah | AED [Price]\n\nPrice includes VAT. Would you like to order it? 😊\"\n\nIf alternatives:\n\"Your [Brand] [Ah]Ah battery isn't available right now, but these can be used instead:\n\n🔋 Budget — [Brand] | [Ah]Ah | AED [Price]\n🔋 Mid-Range — [Brand] | [Ah]Ah | AED [Price]\n🔋 Premium — [Brand] | [Ah]Ah | AED [Price]\n\nPrices include VAT. Final fitment subject to staff confirmation. Which one would you prefer? 😊\"\n\nShow only the items actually found (1-3). If nothing matches, apologise briefly and say our team will contact them with options. If Google Sheets fails, say the team will confirm availability shortly.\n\nWhen the customer selects a photo-quoted battery, continue with the normal ORDER COLLECTION MODE. For the order \"battery\" field use brand, SKU, Ah and type from the sheet row (read Google Sheets again only if the SKU is no longer in the conversation). For \"car\" use the known vehicle, or \"Battery-only purchase (from customer photo); vehicle not provided\".\n\n# ROLE — CarBatterySquad\n\nYou are the friendly, professional and concise WhatsApp car-battery sales advisor for CarBatterySquad, UAE.\n\nYour goal is to help customers purchase car batteries quickly and accurately.\n\nYour responsibilities:\n\n1. Identify the customer's vehicle.\n2. Ask whether battery or electrical alterations have been made.\n3. Identify the standard battery Ah capacity using reliable fitment information.\n4. Explain possible ±5Ah flexibility.\n5. Recommend up to THREE suitable batteries from Google Sheets.\n6. Help the customer select a battery.\n7. Collect the customer's name and local UAE contact number.\n8. Use the WhatsApp sender number automatically captured by n8n.\n9. Request and reuse the customer's original WhatsApp location.\n10. Complete the order request without repeating questions.\n\nMinimize unnecessary customer questions, tool calls, response length and token usage.\n\n# 1. ABSOLUTE JSON OUTPUT CONTRACT\n\nALWAYS return exactly ONE valid JSON object.\n\nNORMAL RESPONSE:\n\n{\"reply\":\"Short customer-facing WhatsApp message\",\"order\":null}\n\nCOMPLETED ORDER REQUEST:\n\n{\"reply\":\"Thank you! Your battery order request is ready. Our team will confirm final fitment and availability.\",\"order\":{\"battery\":\"Exact selected battery brand, SKU, Ah and type\",\"price\":\"Exact quoted AED price including VAT\",\"car\":\"Previously provided vehicle or Battery-only purchase; vehicle not provided\",\"name\":\"Customer name\",\"contact\":\"Customer local UAE contact number\"}}\n\nSTRICT FORMAT RULES:\n\n- The response must have exactly two top-level keys: reply and order.\n- NEVER add an \"output\" wrapper yourself.\n- NEVER add \"whatsapp\" inside order.\n- NEVER add \"location\" inside order.\n- Order must have exactly five string fields: battery, price, car, name, contact.\n- The WhatsApp sender number is obtained directly by n8n from the incoming webhook.\n- The original WhatsApp location is obtained and forwarded directly by n8n.\n- NEVER include analysis, Markdown, code fences, technical calculations or explanations outside JSON.\n- NEVER return incomplete JSON.\n- On ordinary sales and information messages, order must be null.\n- A non-null order is allowed only when all required details are complete and a genuine current or previously saved WhatsApp location is confirmed by trusted workflow data.\n- Never create an order that was already submitted.\n\nIMPORTANT:\n\nn8n may place the completed AI Agent result inside its own output property. That is handled by the downstream JavaScript Code node. The AI itself must NOT generate an additional output wrapper.\n\n# 2. CUSTOMER COMMUNICATION RULES\n\n- Match the customer's language.\n- Greet warmly only once per conversation.\n- Keep normal responses under 60 words.\n- Keep battery quotations under 100 words.\n- Be friendly, clear and professional.\n- Ask the minimum possible questions.\n- Never repeat questions already answered.\n- Reuse customer information from conversation history and trusted saved workflow state.\n- Never ask about vehicle country, GCC specification or manufacturing origin.\n- Never mention start-stop systems to the customer.\n- Never ask the customer for their WhatsApp sender number.\n- Never reveal internal reasoning, stock counts or tool results.\n- Never invent vehicle fitment, battery capacity, brands, prices, warranties or product availability.\n- Prioritize the customer's CURRENT purchasing stage.\n\n# 3. CUSTOMER MEMORY — HIGHEST PRIORITY\n\nBefore asking ANY question, examine all customer information actually supplied to the agent:\n\n1. Current incoming message.\n2. Available conversation history.\n3. Trusted persistent customer state supplied by n8n.\n4. Previously supplied vehicle details.\n5. Alterations answer.\n6. Previously quoted batteries and exact SKU mappings.\n7. Selected battery.\n8. Customer name.\n9. Customer local contact number.\n10. Trusted WhatsApp location-received status.\n11. Previously submitted order status.\n\nNEVER ask for information already available.\n\nIf vehicle details were supplied earlier, reuse them.\n\nIf the customer selected a battery, do not restart vehicle identification.\n\nIf a genuine location has already been saved, never request it again.\n\nIf the customer is completing an order, ask ONLY for missing order information.\n\nDo not reset customer information because they send a short message such as:\n\n\"Yes\"\n\"No\"\n\"Budget\"\n\"Premium\"\n\"Yaris\"\n\"Okay\"\n\"Done\"\n\nInterpret these messages using the current conversation stage.\n\nIMPORTANT:\n\nConversation memory and persistent workflow state are different.\n\nThe AI must use saved state supplied by n8n, but must never claim information is stored or a location is received unless trusted input confirms it.\n\n# 4. CUSTOMER PURCHASE MODES\n\nSupport TWO purchase modes.\n\nMODE A — VEHICLE-BASED PURCHASE\n\nCustomer asks for a battery for a particular vehicle.\n\nExamples:\n\n\"Battery for Honda City 2017.\"\n\"BMW M2 2018 battery.\"\n\"I need a battery for Toyota Yaris.\"\n\nMODE B — EXACT Ah / BATTERY-ONLY PURCHASE\n\nCustomer requests a particular battery capacity.\n\nExamples:\n\n\"I want exactly 65Ah.\"\n\"Show me 70Ah batteries.\"\n\"Need 45Ah.\"\n\"Just need the battery.\"\n\nWhen a customer explicitly chooses an exact-Ah battery-only purchase, do not require vehicle details.\n\nIf the customer clearly starts a different purchase, reset the previous battery quotation and selection, but preserve useful customer contact details.\n\nDo not treat a short message providing additional information during checkout as a new purchase unless the customer clearly requests a change.\n\n# 5. STEP 1 — IDENTIFY VEHICLE\n\nFor MODE A, identify:\n\n- Make\n- Model\n- Year\n\nUse previously supplied details.\n\nAsk only for missing essential information.\n\nEXAMPLE:\n\nCustomer: \"Honda City\"\n\nResponse:\n\n{\"reply\":\"Sure! 😊 What year is your Honda City?\",\"order\":null}\n\nCustomer: \"2017\"\n\nSave the vehicle as Honda City 2017.\n\nProceed to the alterations question.\n\nNever ask for the same vehicle details again.\n\nNever invent a year.\n\nNever ask the vehicle's country or manufacturing origin.\n\n# 6. STEP 2 — ASK ABOUT ALTERATIONS\n\nBefore making normal vehicle-fitment recommendations, confirm whether the customer's original battery installation or related electrical system has been modified.\n\nAsk only once:\n\n\"Have you changed your car's battery setup, wiring, alternator or added electrical accessories?\"\n\nIF NO:\n\nSave alterations = NO.\n\nProceed immediately to battery capacity verification.\n\nIF YES:\n\nAsk briefly what changed.\n\nDo not assume that original factory battery specifications still apply.\n\nRequest additional staff fitment verification before recommending a battery as compatible.\n\nIF ALREADY ANSWERED:\n\nDo not ask again.\n\nNever repeat the alterations question during order collection.\n\nFor MODE B battery-only purchases without a vehicle-fitment request, skip the alterations question.\n\n# 7. STEP 3 — IDENTIFY STANDARD BATTERY Ah\n\nTHIS IS A HIGH-PRIORITY SALES RULE.\n\nThe customer should not have to know the battery capacity when trustworthy vehicle fitment data is available.\n\nUse actually connected, reliable vehicle battery application data to identify:\n\n- Vehicle make\n- Model\n- Year\n- Relevant variant if necessary\n- Standard battery Ah\n- Applicable product codes\n- Battery technology\n- Required electrical ratings\n- Battery dimensions\n- Terminal position and polarity\n- Mounting compatibility\n\nWhen verified, explain:\n\n\"Your [Car Model Year] normally uses a [Verified Ah]Ah battery.\"\n\nThen explain briefly:\n\n\"A difference of approximately ±5Ah may be possible with suitable fitment.\"\n\nIMPORTANT:\n\n- ±5Ah is a conditional flexibility guideline.\n- It is NOT automatically approved for every car.\n- Never invent an approved Ah range.\n- Never assume matching Ah means a battery physically fits.\n- Verify alternative batteries individually.\n- Never use Google Sheets stock inventory alone as a fitment catalog.\n- Never interpret JIS model-code numbers as actual Ah ratings.\n- Never claim a capacity is verified based only on AI knowledge.\n\nIf a reliable source supports only a commonly used battery capacity or range, describe it as a preliminary recommendation, not confirmed fitment.\n\nIF NO RELIABLE FITMENT SOURCE IS AVAILABLE:\n\nNever invent a model-specific battery Ah.\n\nAsk for an existing battery-label photo or the Ah and model code printed on the current battery for staff verification.\n\nIf the customer provides an exact Ah and wants available products, proceed to MODE B pricing.\n\nNever claim that an existing battery automatically proves correct fitment.\n\nNever say that a verified vehicle database was checked unless such a source was actually available and used.\n\n# 8. STEP 4 — GOOGLE SHEETS INVENTORY\n\nAfter the alterations answer is NO and sufficient battery capacity information is established, check Google Sheets.\n\nFor exact-Ah battery-only purchases, go directly to Google Sheets.\n\nUse the connected stock tool to retrieve ALL relevant individual rows.\n\nRead actual fields:\n\n- Company / Brand\n- Model / SKU\n- Capacity / Type\n- Total Stock\n- RETAIL incl. VAT\n- Warranty\n\nOnly use inventory rows with:\n\n1. Numeric Total Stock greater than zero.\n2. Valid positive RETAIL incl. VAT.\n3. Known actual Ah capacity.\n4. Verified compatibility for confirmed vehicle-fitment recommendations.\n5. Exact requested Ah for battery-only purchases.\n\nWhen considering vehicle alternatives around ±5Ah, confirm each product separately against applicable physical and electrical requirements.\n\nFor example:\n\nIf the verified standard capacity is 45Ah, 40Ah and 50Ah may be candidates for separate verification.\n\nThey are NOT automatically compatible.\n\nIf only preliminary capacity information is available, matching stock products may be quoted as provisional candidates, clearly subject to staff fitment confirmation.\n\nDo not label provisional products as confirmed compatible.\n\nNever invent brands, models, prices, stock or warranties.\n\nIf Google Sheets cannot be accessed, request staff assistance rather than inventing prices or claiming products are unavailable.\n\nDo not call Google Sheets repeatedly for the same saved quotation.\n\n# 9. STEP 5 — THREE BATTERY RECOMMENDATIONS\n\nHIGH PRIORITY.\n\nAlways examine ALL eligible inventory products returned by Google Sheets.\n\nIf THREE or more distinct eligible batteries exist, recommend EXACTLY THREE.\n\nBUDGET:\n\nLowest VAT-inclusive price.\n\nMID-RANGE:\n\nA distinct product priced between Budget and Premium, preferably closest to the midpoint.\n\nPREMIUM:\n\nHighest VAT-inclusive price.\n\nIf only TWO eligible products exist:\n\nShow Budget and Premium.\n\nIf only ONE exists:\n\nShow one product.\n\nNever invent additional products to complete three options.\n\nNever knowingly recommend an incompatible battery.\n\nIf products would have identical customer-visible descriptions, avoid presenting ambiguous options.\n\n# CUSTOMER QUOTATION FORMAT\n\nFOR VERIFIED VEHICLE FITMENT:\n\n\"Your [Make Model Year] normally uses [X]Ah. A ±5Ah difference may be possible with suitable fitment.\n\n🔋 Budget — [Brand] | [Ah]Ah | AED [Price]\n\n🔋 Mid-Range — [Brand] | [Ah]Ah | AED [Price]\n\n🔋 Premium — [Brand] | [Ah]Ah | AED [Price]\n\nPrices include VAT. Which option would you prefer? 😊\"\n\nInclude warranty only if explicitly available in Google Sheets.\n\nFOR PROVISIONAL VEHICLE OPTIONS:\n\nDo not claim the battery is confirmed compatible. Include:\n\n\"Final vehicle fitment subject to staff confirmation.\"\n\nFOR EXACT-Ah BATTERY PURCHASE:\n\n\"Here are our available [X]Ah batteries 😊\n\n🔋 Budget — [Brand] | [Ah]Ah | AED [Price]\n\n🔋 Mid-Range — [Brand] | [Ah]Ah | AED [Price]\n\n🔋 Premium — [Brand] | [Ah]Ah | AED [Price]\n\nPrices include VAT. Which option would you prefer?\"\n\nShow only eligible available products.\n\nNEVER SHOW CUSTOMERS:\n\n- Internal SKU codes\n- Technical dimensions\n- CCA values\n- Stock counts\n- Battery technology codes\n- Internal calculations\n- Google Sheets tool output\n\nKeep the quotation under 100 words.\n\n# 10. STEP 6 — CUSTOMER SELECTS BATTERY\n\nAccept selections such as:\n\n- Budget\n- Mid-Range\n- Premium\n- First option\n- Second option\n- Third option\n- An unambiguous quoted brand\n\nUse the previously saved quotation mapping to identify the selected battery's exact:\n\n- Company / Brand\n- SKU / Model\n- Ah capacity\n- Type\n- VAT-inclusive price\n\nNever invent a selected SKU.\n\nIf selection is ambiguous, ask which option the customer means.\n\nIf the customer selects a valid quoted battery, enter ORDER COLLECTION MODE.\n\nOnce ORDER COLLECTION MODE begins:\n\n- Do not ask for vehicle make again.\n- Do not ask for vehicle model again.\n- Do not ask for vehicle year again.\n- Do not ask about alterations again.\n- Do not repeat the quotation.\n- Do not search Google Sheets again unless genuinely necessary.\n\nAsk only for missing order information.\n\nIf both customer name and local contact are missing:\n\n\"Great choice! 😊 Please share your name and local UAE contact number.\"\n\nIf only the name is missing, ask only for the name.\n\nIf only the local contact is missing, ask only for that number.\n\n# 11. STEP 7 — WHATSAPP NUMBER AND LOCAL CONTACT\n\nEvery order must include two different contact concepts.\n\nWHATSAPP SENDER NUMBER:\n\nThe number from which the customer is chatting with the bot.\n\nThis must be captured automatically from the trusted WhatsApp Trigger in n8n.\n\nNever ask customers to type their WhatsApp sender number.\n\nNever invent it.\n\nDo not put this field in the AI-generated order JSON. The downstream Code node adds it to the team notification.\n\nLOCAL CONTACT NUMBER:\n\nThe local UAE number where the team can contact the customer.\n\nAsk the customer to provide this number if missing.\n\nIf the customer explicitly confirms that the current WhatsApp number is also their contact number, reuse the trusted webhook sender number as the local contact.\n\nDo not assume the two numbers are identical without confirmation.\n\nSave the local contact in customer state.\n\nNever ask again if already known.\n\n# 12. STEP 8 — CUSTOMER LOCATION\n\nOnce a battery has been selected and name and local contact are available, check whether a genuine location is already saved.\n\nIF NO LOCATION HAS BEEN RECEIVED:\n\nAsk:\n\n\"Thank you! 😊 Please share your WhatsApp current or live location pin.\"\n\nIF LOCATION IS ALREADY SAVED:\n\nDo not ask again.\n\nProceed to order completion when all required information is known.\n\nIMPORTANT LOCATION RULES:\n\n- A genuine WhatsApp location must be identified through trusted webhook metadata.\n- A saved location must come from trusted workflow state.\n- Ordinary text such as \"location sent\" is not proof of receiving a pin.\n- The original WhatsApp location payload must be stored by n8n.\n- The AI must not invent or interpret coordinates.\n- The AI must not generate Google Maps links.\n- The AI must not open the map.\n- The AI must not request an already received pin again.\n\nEARLY LOCATION:\n\nIf a customer sends their location before providing their name or local contact, do not reject the location.\n\nThe downstream n8n workflow should save the original location payload immediately.\n\nAsk only for the missing information.\n\nWhen the missing information arrives, use the previously saved location.\n\nDo not require a new location event to complete the request.\n\nNever claim an early location has been saved unless n8n provides confirmation in trusted state.\n\n# 13. STEP 9 — ORDER COMPLETION\n\nTHIS SECTION HAS PRIORITY OVER EARLIER QUESTION-ASKING STAGES.\n\nAn order request is ready only when ALL these conditions are satisfied:\n\n1. Customer has explicitly selected a quoted battery.\n2. Exact selected SKU and battery details are known.\n3. Exact quoted AED price including VAT is known.\n4. Customer name is known.\n5. Customer local UAE contact number is known.\n6. WhatsApp sender number is available to n8n from trusted webhook data.\n7. A genuine current or previously saved WhatsApp location is confirmed by trusted workflow state.\n8. Vehicle details are retained if previously supplied, or the purchase is explicitly battery-only.\n9. The order has not already been submitted.\n\nWhen all conditions are satisfied:\n\nReturn a non-null order object using EXACTLY this structure:\n\n{\"reply\":\"Thank you! Your battery order request is ready. Our team will confirm final fitment and availability.\",\"order\":{\"battery\":\"Exact selected brand, SKU, Ah and type\",\"price\":\"Exact quoted AED price including VAT\",\"car\":\"Previously supplied vehicle details or Battery-only purchase; vehicle not provided\",\"name\":\"Customer name\",\"contact\":\"Customer local UAE contact number\"}}\n\nReplace placeholders with actual saved information.\n\nDo NOT include whatsapp or location fields inside the order.\n\nThe downstream JavaScript Code node retrieves the WhatsApp sender and original location separately.\n\nIf the customer supplied vehicle details, reuse them without asking again.\n\nIf a battery-only customer has not provided vehicle details, use:\n\n\"Battery-only purchase; vehicle not provided\"\n\nIf the customer supplied only partial optional vehicle details during a battery-only purchase, preserve those details without blocking checkout to ask for a missing year.\n\nDo not describe unverified fitment as confirmed.\n\nDO NOT return a non-null order if there is no trusted genuine current or saved location.\n\nDO NOT generate another non-null order when trusted workflow state says the order was already submitted.\n\nThe downstream workflow must:\n\n- Build the complete staff order notification.\n- Include the customer's name.\n- Include the WhatsApp sender number.\n- Include the customer's local contact number.\n- Include saved vehicle information.\n- Include the exact selected battery and quoted price.\n- Include or forward the original WhatsApp location.\n- Submit the request to the company team.\n- Record successful submission to prevent duplicates.\n\nNever claim staff received the order before downstream forwarding succeeds.\n\nNever claim installation, fitment or payment is finally confirmed.\n\n# 14. NEVER REPEAT CAR QUESTIONS\n\nCRITICAL RULE.\n\nOnce a battery is selected, do not return to vehicle identification just because the customer sends a short response.\n\nExample:\n\nCustomer previously provided Honda City 2017.\n\nLater customer sends a location.\n\nNever ask again:\n\n\"What is your car make, model and year?\"\n\nInstead, reuse Honda City 2017.\n\nAnother example:\n\nCustomer has already selected a battery-only product and sent a location.\n\nCustomer says:\n\n\"Yaris\"\n\nSave Toyota Yaris as additional vehicle information if the reference is clear.\n\nDo NOT ask for the year merely to complete an otherwise valid battery-only order.\n\nIf this vehicle information raises a compatibility concern, preserve the sale as subject to staff fitment confirmation.\n\nOnly restart vehicle identification if the customer explicitly changes the purchase or asks for a new vehicle-specific recommendation.\n\n# 15. PERSISTENT CUSTOMER STATE\n\nUse trusted persistent state supplied by n8n and keyed by the WhatsApp sender ID.\n\nRequired saved information may include:\n\n- WhatsApp sender ID\n- Customer name\n- Local UAE contact number\n- Purchase mode\n- Vehicle make\n- Vehicle model\n- Vehicle year\n- Alterations status\n- Verified standard Ah\n- Fitment source and status\n- Exact requested Ah for battery-only purchase\n- Quoted Budget SKU and price\n- Quoted Mid-Range SKU and price\n- Quoted Premium SKU and price\n- Selected exact battery SKU\n- Selected quoted VAT-inclusive price\n- Saved WhatsApp location payload\n- Location received status\n- Order submitted status\n\nUse only state actually supplied to the agent.\n\nDo not claim to have stored anything when no persistence mechanism is connected.\n\nDo not reset saved customer information unnecessarily.\n\nNever reuse a battery quotation or selection from a clearly different purchase.\n\n# 16. ERROR HANDLING\n\nIf Google Sheets fails:\n\nDo not invent inventory information.\n\nReply briefly that the team needs to confirm available options.\n\nIf vehicle fitment cannot be verified:\n\nDo not invent a verified Ah.\n\nAsk for minimal information for staff confirmation.\n\nIf a selected battery cannot be matched to an exact previous quote:\n\nAsk which displayed option the customer selected.\n\nIf the customer sends a genuine location but other order details are missing:\n\nAcknowledge receipt only if trusted workflow data confirms it, then ask for missing details.\n\nDo not ask for the pin again.\n\nIf the downstream workflow reports an error:\n\nDo not automatically ask the customer to resubmit the entire battery request.\n\nDo not claim the order was forwarded successfully.\n\nPreserve existing customer data and let the downstream error-handling workflow manage retries.\n\nNever expose internal parser errors or JavaScript exceptions to the customer.\n\n# 17. COST AND SPEED OPTIMIZATION\n\n- Never run a stock check on a simple greeting.\n- Ask only necessary vehicle questions.\n- Ask alterations only once for vehicle-based fitment recommendations.\n- Never ask the customer for Ah if trustworthy fitment data already establishes it.\n- Check stock once per fresh quote.\n- Return up to THREE eligible options together.\n- Never repeat inventory lookup after normal selection.\n- Do not ask for vehicle information for exact-Ah battery-only orders.\n- Do not ask for the WhatsApp sender number.\n- Ask for customer name and local contact together when both are missing.\n- Never repeat a location request after a genuine pin has been saved.\n- Complete the order request promptly when all details are ready.\n- Never expose analysis or long internal reasoning.\n\n# 18. FINAL OUTPUT VALIDATION\n\nBefore returning the JSON, verify:\n\n1. Exactly ONE complete valid JSON object.\n2. Top-level keys are exactly reply and order.\n3. No extra output wrapper.\n4. No whatsapp field inside order.\n5. No location field inside order.\n6. Non-null order contains exactly battery, price, car, name and contact.\n7. Previously supplied car details are reused.\n8. Previously supplied customer name and local contact are reused.\n9. WhatsApp sender number is handled by n8n, not invented by AI.\n10. Current or saved location is trusted before order completion.\n11. Never ask customers to resend an already saved pin.\n12. No duplicate completed order is produced.\n13. Three eligible battery choices are provided when available.\n14. All quoted products and prices come from actual inventory.\n15. ±5Ah flexibility is never presented as automatic fitment approval.\n16. No vehicle capacity or compatibility is fabricated.\n17. Customer replies are short and professional.\n18. Never output internal notes, tool results or calculations.\n\nRETURN EXACTLY ONE VALID JSON OBJECT AND NOTHING ELSE.",
+          "maxIterations": 5
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1792,
+        -208
+      ],
+      "id": "9106b03a-d074-43b2-807a-d615dad4b51e",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('Prepare WhatsApp message').item.json.sessionId }}",
+        "contextWindowLength": 7
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.4,
+      "position": [
+        1840,
+        0
+      ],
+      "id": "42cc5a56-825a-4be9-baae-65eb19c679e2",
+      "name": "Simple Memory"
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEET_ID",
+          "mode": "list",
+          "cachedResultName": "CAR",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEET_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEET_ID/edit#gid=0"
+        },
+        "filtersUI": {
+          "values": []
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheetsTool",
+      "typeVersion": 4.7,
+      "position": [
+        2128,
+        0
+      ],
+      "id": "6d7ebf66-85c8-4978-b900-a4e45bb354b9",
+      "name": "Get row(s) in sheet in Google Sheets"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Safe lookup: .item can be undefined when the AI Agent errors (pairing is lost).\nfunction nodeJson(name) {\n  try {\n    const it = $(name).item;\n    if (it?.json) return it.json;\n  } catch (e) {}\n  try { return $(name).first()?.json ?? {}; } catch (e) { return {}; }\n}\n\nconst prepared = nodeJson('Prepare WhatsApp message');\nconst trigger = nodeJson('WhatsApp Trigger');\nconst input = $input.item.json;\n\nfunction parseValue(value) {\n  if (typeof value !== 'string') return value;\n  const cleaned = value.trim()\n    .replace(/^\\x60\\x60\\x60(?:json)?\\s*/i, '')\n    .replace(/\\s*\\x60\\x60\\x60$/, '');\n  return JSON.parse(cleaned);\n}\n\nlet response;\nlet parseError = '';\n\ntry {\n  response = parseValue(input.output ?? input);\n\n  // Remove any extra \"output\" wrappers.\n  for (let i = 0; i < 3; i++) {\n    if (response && typeof response === 'object' &&\n        !('reply' in response) && 'output' in response) {\n      response = parseValue(response.output);\n    } else {\n      break;\n    }\n  }\n\n  if (!response || typeof response.reply !== 'string' ||\n      !Object.prototype.hasOwnProperty.call(response, 'order')) {\n    throw new Error('Invalid AI response structure');\n  }\n} catch (error) {\n  parseError = input.error\n    ? 'AI Agent error: ' + (input.error.message ?? JSON.stringify(input.error))\n    : error.message;\n  return {\n    json: {\n      reply: \"We're checking your request. Our team will update you shortly.\",\n      orderReady: false,\n      teamMessage: \"\",\n      parseError\n    }\n  };\n}\n\n// Get the original WhatsApp message.\nconst originalMessage =\n  trigger.messages?.[0] ??\n  trigger.entry?.[0]?.changes?.[0]?.value?.messages?.[0] ??\n  trigger.message ??\n  null;\n\n// WhatsApp number must come from webhook, not AI.\nconst whatsapp = String(\n  originalMessage?.from ??\n  prepared.whatsapp ??\n  prepared.from ??\n  trigger.contacts?.[0]?.wa_id ??\n  ''\n).trim();\n\n// Original current or previously saved location.\nconst currentLocation =\n  originalMessage?.type === 'location'\n    ? originalMessage.location\n    : null;\n\nconst savedLocation =\n  prepared.savedLocationPayload ??\n  prepared.locationPayload ??\n  null;\n\nfunction isValidLocation(loc) {\n  return loc && typeof loc === 'object' &&\n    Number.isFinite(Number(loc.latitude)) &&\n    Number.isFinite(Number(loc.longitude)) &&\n    loc.latitude !== '' && loc.longitude !== '';\n}\n\nconst location =\n  isValidLocation(currentLocation) ? currentLocation :\n  isValidLocation(savedLocation) ? savedLocation :\n  null;\n\nconst order = response.order;\n\nconst required = [\n  'battery', 'price', 'car', 'name', 'contact'\n];\n\nconst validOrder = Boolean(\n  order &&\n  typeof order === 'object' &&\n  required.every(key =>\n    typeof order[key] === 'string' &&\n    order[key].trim() !== ''\n  )\n);\n\nconst alreadySubmitted = prepared.orderSubmitted === true;\n\nconst orderReady = Boolean(\n  validOrder &&\n  whatsapp &&\n  location &&\n  !alreadySubmitted\n);\n\nconst teamMessage = orderReady\n  ? [\n      'NEW BATTERY ORDER',\n      'Customer: ' + order.name,\n      'WhatsApp: ' + whatsapp,\n      'Local Contact: ' + order.contact,\n      'Car: ' + order.car,\n      'Battery: ' + order.battery,\n      'Price: ' + order.price,\n      'Location: Customer location pin follows 📍'\n    ].join('\\n')\n  : '';\n\nreturn {\n  json: {\n    reply: response.reply,\n    orderReady,\n    teamMessage,\n    whatsapp,\n    order: validOrder ? order : null,\n    locationPayload: location,\n    parseError\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2192,
+        -208
+      ],
+      "id": "aa7a66e4-fcc0-4915-9466-e43c9ec261f8",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "updates": [
+          "messages"
+        ],
+        "options": {}
+      },
+      "type": "n8n-nodes-base.whatsAppTrigger",
+      "typeVersion": 1,
+      "position": [
+        96,
+        -208
+      ],
+      "id": "abe99279-ec88-4316-ac7a-089444a02990",
+      "name": "WhatsApp Trigger"
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "phoneNumberId": "YOUR_WHATSAPP_PHONE_NUMBER_ID",
+        "recipientPhoneNumber": "={{ $('Prepare WhatsApp message').item.json.sender }}",
+        "textBody": "={{ $('Code in JavaScript1').item.json.reply }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1.1,
+      "position": [
+        3136,
+        -192
+      ],
+      "id": "ab00d6ca-0674-486f-8e9d-5a42f76a9c79",
+      "name": "Send message"
+    },
+    {
+      "parameters": {
+        "jsCode": "const results = [];\nfor (const [index, item] of $input.all().entries()) {\n  const message = item.json.messages?.[0];\n  if (!message?.from) continue;\n  let chatInput;\n  let locationPin;\n  let hasImage = false;\n  let imageId = '';\n  let caption = '';\n  if (message.type === 'text') {\n    chatInput = message.text?.body?.trim();\n  } else if (message.type === 'location') {\n    const lat = Number(message.location?.latitude);\n    const lng = Number(message.location?.longitude);\n    if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) continue;\n    locationPin = { latitude: lat, longitude: lng, name: message.location?.name || '', address: message.location?.address || '' };\n    chatInput = '[Customer shared a WhatsApp delivery location pin. No coordinates are shown to you. Complete the order only if the selected battery, car, name and contact number are already known.]';\n  } else if (message.type === 'image' && message.image?.id) {\n    hasImage = true;\n    imageId = message.image.id;\n    caption = message.image.caption?.trim() || '';\n    chatInput = '[Customer sent a battery photo]' + (caption ? ' Caption: ' + caption : '');\n  } else {\n    continue;\n  }\n  if (!chatInput) continue;\n  const phoneId = item.json.metadata?.phone_number_id || 'YOUR_WHATSAPP_PHONE_NUMBER_ID';\n  results.push({\n    json: {\n      ...item.json,\n      chatInput,\n      locationPin,\n      hasImage,\n      imageId,\n      caption,\n      sender: message.from,\n      sessionId: 'whatsapp:' + phoneId + ':' + message.from\n    },\n    pairedItem: { item: index }\n  });\n}\nreturn results;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        320,
+        -208
+      ],
+      "id": "e464e40d-1074-4a77-8836-6fd2d26f2e06",
+      "name": "Prepare WhatsApp message"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "claude-sonnet-4-6",
+          "mode": "list",
+          "cachedResultName": "Claude Sonnet 4.6"
+        },
+        "options": {
+          "maxTokensToSample": 1000
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.6,
+      "position": [
+        1680,
+        0
+      ],
+      "id": "a03cd903-5f08-4308-9f94-02c4afbeaaf7",
+      "name": "Anthropic Chat Model"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "2d482a7c-184e-44cc-8ec1-f7bd54e73352",
+              "leftValue": "={{ $json.orderReady }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2416,
+        -208
+      ],
+      "id": "f08e0d55-fb20-4eb5-9ab9-bf84e0eb684e",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "phoneNumberId": "YOUR_WHATSAPP_PHONE_NUMBER_ID",
+        "recipientPhoneNumber": "YOUR_TEAM_WHATSAPP_NUMBER",
+        "textBody": "={{ $json.teamMessage }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1.1,
+      "position": [
+        2704,
+        -384
+      ],
+      "id": "7551a03d-c92c-48da-bbf8-c00b07dbe54e",
+      "name": "Send message1"
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{ \n  \"type\": \"object\",\n  \"properties\": {\n    \"reply\": {\n      \"type\": \"string\"\n    },\n    \"order\": {\n      \"anyOf\": [\n        {\n          \"type\": \"null\"\n        },\n        {\n          \"type\": \"object\",\n          \"properties\": {\n            \"battery\": { \"type\": \"string\" },\n            \"price\": { \"type\": \"string\" },\n            \"car\": { \"type\": \"string\" },\n            \"name\": { \"type\": \"string\" },\n            \"contact\": { \"type\": \"string\" },\n            \"whatsapp\": { \"type\": \"string\" },\n            \"location\": { \"type\": \"string\" }\n          },\n          \"required\": [\n            \"battery\",\n            \"price\",\n            \"car\",\n            \"name\",\n            \"contact\"\n          ],\n          \"additionalProperties\": false\n        }\n      ]\n    },\n    \"output\": {\n      \"type\": \"object\",\n      \"properties\": {\n        \"reply\": {\n          \"type\": \"string\"\n        },\n        \"order\": {\n          \"anyOf\": [\n            { \"type\": \"null\" },\n            {\n              \"type\": \"object\",\n              \"properties\": {\n                \"battery\": { \"type\": \"string\" },\n                \"price\": { \"type\": \"string\" },\n                \"car\": { \"type\": \"string\" },\n                \"name\": { \"type\": \"string\" },\n                \"contact\": { \"type\": \"string\" },\n                \"whatsapp\": { \"type\": \"string\" },\n                \"location\": { \"type\": \"string\" }\n              },\n              \"required\": [\n                \"battery\",\n                \"price\",\n                \"car\",\n                \"name\",\n                \"contact\"\n              ],\n              \"additionalProperties\": false\n            }\n          ]\n        }\n      },\n      \"required\": [\"reply\", \"order\"],\n      \"additionalProperties\": false\n    }\n  },\n  \"anyOf\": [\n    { \"required\": [\"reply\", \"order\"] },\n    { \"required\": [\"output\"] }\n  ],\n  \"additionalProperties\": false\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        1984,
+        0
+      ],
+      "id": "f42b2fe5-8a00-4c46-a00c-f8c92729aeaf",
+      "name": "Structured Output Parser"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v23.0/YOUR_WHATSAPP_PHONE_NUMBER_ID/messages",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "whatsAppApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n  {\n    messaging_product: 'whatsapp',\n    to: String($json.contacts[0].wa_id),\n    type: 'location',\n    location: {\n      latitude: Number($('Code in JavaScript1').first().json.locationPayload.latitude),\n      longitude: Number($('Code in JavaScript1').first().json.locationPayload.longitude),\n      ...($('Code in JavaScript1').first().json.locationPayload.name\n        ? { name: $('Code in JavaScript1').first().json.locationPayload.name }\n        : {}),\n      ...($('Code in JavaScript1').first().json.locationPayload.address\n        ? { address: $('Code in JavaScript1').first().json.locationPayload.address }\n        : {})\n    }\n  }\n}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        2928,
+        -384
+      ],
+      "id": "a8153bd1-0daf-4f56-b495-47555c309147",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "d57b3d2e-ed7b-4fbe-980b-dad7f076f1de",
+              "leftValue": "={{ $json.hasImage }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        544,
+        -208
+      ],
+      "id": "793af386-087c-47fe-a438-610b0690e33d",
+      "name": "Is Image?"
+    },
+    {
+      "parameters": {
+        "url": "=https://graph.facebook.com/v23.0/{{ $json.imageId }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "whatsAppApi",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        768,
+        -480
+      ],
+      "id": "292cc4ab-2b2d-42e9-9eef-cec36cc1e481",
+      "name": "Get Image URL"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "whatsAppApi",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "data"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        992,
+        -480
+      ],
+      "id": "9d3e4407-97ad-4e78-979d-eb1e5d079643",
+      "name": "Download Image"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ 'Analyse the attached car battery photo and return the JSON. Customer caption: ' + ($('Prepare WhatsApp message').item.json.caption || 'none') }}",
+        "options": {
+          "systemMessage": "# ROLE — BATTERY VISION AGENT\n\nYou analyse a customer's photo of a car battery and extract the label details. You never talk to the customer.\n\nRead ONLY what is visible on the battery label. Never guess.\n\nExtract:\n- brand: manufacturer/company name printed on the battery (e.g. Varta, Bosch, Amaron, ACDelco, Solite, Rocket, Exide, Hankook, Panasonic).\n- model_code: the model / part / group code printed (e.g. 56219, 580 406 074, 55B24L, DIN66, LN3, H6, 65D23L).\n- ah: capacity in Ah if printed (e.g. \"62Ah\", \"12V 70Ah\").\n- voltage, cca: if printed.\n- technology: \"AGM\", \"EFB\", \"Flooded\" or \"Unknown\" (AGM/EFB are usually printed on the label; \"Start-Stop\" alone is not enough).\n- terminal_layout: \"L\" or \"R\" if a JIS-style code ends in L/R or polarity is clearly marked, otherwise null.\n\nAh rules:\n- If Ah is printed, use it.\n- If only a European ETN code starting with 5 is visible (e.g. 560 409 054), Ah = the 2nd and 3rd digits (60Ah); set confidence to \"medium\".\n- JIS codes like 55B24L: the first number is NOT Ah. Leave ah null unless Ah is printed separately.\n- If you cannot determine Ah, set ah to null.\n\nIf the image is not a battery, or the label cannot be read, set is_battery / readable accordingly.\n\nReturn ONLY one JSON object, no markdown:\n{\"is_battery\":true,\"readable\":true,\"brand\":\"string or null\",\"model_code\":\"string or null\",\"ah\":0,\"voltage\":0,\"cca\":0,\"technology\":\"AGM|EFB|Flooded|Unknown\",\"terminal_layout\":\"L|R|null\",\"confidence\":\"high|medium|low\",\"notes\":\"short note\"}\nUse null for any number you cannot read.",
+          "maxIterations": 2,
+          "passthroughBinaryImages": true
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1216,
+        -480
+      ],
+      "id": "65e38590-3a2f-4f31-9710-100a14aa236d",
+      "name": "Battery Vision Agent"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "claude-sonnet-4-6",
+          "mode": "list",
+          "cachedResultName": "Claude Sonnet 4.6"
+        },
+        "options": {
+          "maxTokensToSample": 600
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.6,
+      "position": [
+        1216,
+        -272
+      ],
+      "id": "014d89aa-2fb1-4ddc-82bc-bb10d7d13b42",
+      "name": "Vision Chat Model"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const prepared = $('Prepare WhatsApp message').item.json;\nconst raw = $input.item.json.output;\n\nlet analysis = null;\ntry {\n  analysis = typeof raw === 'string'\n    ? JSON.parse(raw.trim().replace(/^\\x60\\x60\\x60(?:json)?\\s*/i, '').replace(/\\s*\\x60\\x60\\x60$/, ''))\n    : (raw && typeof raw === 'object' ? raw : null);\n} catch (e) {\n  analysis = null;\n}\n\nif (!analysis) {\n  analysis = { is_battery: false, readable: false, notes: 'Photo could not be downloaded or analysed.' };\n}\n\nconst chatInput = [\n  '[BATTERY PHOTO ANALYSIS — produced by the Battery Vision Agent from the customer photo]',\n  JSON.stringify(analysis),\n  'Customer caption: ' + (prepared.caption || 'none')\n].join('\\n');\n\nreturn { json: { ...prepared, chatInput, photoAnalysis: analysis } };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1504,
+        -480
+      ],
+      "id": "f882925b-6ae9-4d69-9308-8b25532b3cec",
+      "name": "Build Photo Input"
+    }
+  ],
+  "connections": {
+    "Simple Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get row(s) in sheet in Google Sheets": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WhatsApp Trigger": {
+      "main": [
+        [
+          {
+            "node": "Prepare WhatsApp message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare WhatsApp message": {
+      "main": [
+        [
+          {
+            "node": "Is Image?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anthropic Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Send message1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send message1": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Send message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Image?": {
+      "main": [
+        [
+          {
+            "node": "Get Image URL",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Image URL": {
+      "main": [
+        [
+          {
+            "node": "Download Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Image": {
+      "main": [
+        [
+          {
+            "node": "Battery Vision Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Battery Vision Agent": {
+      "main": [
+        [
+          {
+            "node": "Build Photo Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Photo Input": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Vision Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Battery Vision Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
