@@ -1,5 +1,7 @@
 # AI Voice Agent: Outbound Sales Calls
 
+![DevelMO AI voice agent: a live outbound call with 95% caller understanding accuracy](cover.jpg)
+
 Two workflows that run cold calls with an ElevenLabs voice agent and keep the lead sheet up to date. Built at DevelMO, where the agent is now sold as a product: [DevelMO AI Voice Agent](https://develmo.com/our-products/ai-voice-agent). It understands callers and responds correctly 95% of the time.
 
 ## How it works

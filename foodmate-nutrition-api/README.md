@@ -1,5 +1,7 @@
 # FoodMate Nutrition API
 
+![FoodMate: a meal photo analysed for calories, protein, fat and carbs, with 90% accuracy on clear images](cover.jpg)
+
 The AI backend for [FoodMate](https://foodmate.xapcoders.com), a nutrition app. Two n8n webhooks, both protected by an API key, give the app's frontend its AI features.
 
 In testing, meal recognition and nutrient estimates were 90% accurate on clear photos and 79% on blurry ones.

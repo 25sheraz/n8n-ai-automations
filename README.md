@@ -12,6 +12,15 @@ Each workflow ran for a real client. Before publishing I removed credentials, AP
 | [**VPN support chatbots**](vpn-support-chatbots) | Website support assistants for Sylink and SecureTapVPN that answer only from each company's approved information and hand off to a live agent when needed. **500+ questions a month, 90% resolved without staff.** | DeepSeek, webhooks, chat memory |
 | [**FoodMate nutrition API**](foodmate-nutrition-api) | Two endpoints for a nutrition app: estimate calories and macros from a meal photo, and suggest 5 meals that fit a user's goal and allergies. | GPT-5.4 vision, GPT-5.4-mini, webhooks |
 
+## More client projects
+
+Two more automation projects whose workflows aren't published here.
+
+| Neoline: WhatsApp AI customer service | DevelMO: GoHighLevel CRM lead generation |
+| --- | --- |
+| ![Neoline: a WhatsApp support chat answering from the company's service information and FAQs](docs/neoline.jpg) | ![DevelMO: Apollo leads flowing into GoHighLevel CRM, with +30% revenue in the first month](docs/develmo-crm.jpg) |
+| Answers any question about Neoline's services from its own service information and FAQs, using RAG with Qdrant and OpenAI embeddings. | Pulls B2B leads from Apollo into GoHighLevel, sends AI-personalised emails with automated follow-ups, analyses the sentiment of every reply and books a meeting for each positive one. **+30% revenue in the first month.** |
+
 ## Import a workflow
 
 1. In n8n, open **Workflows → Import from File** and choose a `.json` file.

@@ -1,5 +1,7 @@
 # WhatsApp Battery Sales Bot (multi-agent)
 
+![CarBatterySquad: a WhatsApp chat where the AI bot helps a customer find a car battery and confirms the order](cover.jpg)
+
 A WhatsApp sales assistant for **CarBatterySquad**, a car battery and jump-start service in Dubai. Customers message it at any hour. It finds the right battery for their car, quotes from live stock, takes the order and alerts the team.
 
 ## Test results

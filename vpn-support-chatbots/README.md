@@ -1,5 +1,7 @@
 # VPN Website Support Chatbots: Sylink and SecureTap
 
+![Sylink and SecureTapVPN: website support chats with live agent takeover, 500+ queries a month and 90% resolved without human help](cover.jpg)
+
 AI support assistants for two VPN companies, [Sylink](https://sylink.tecclubx.site) and [SecureTapVPN](https://securetapvpn.com). Each one sits behind the chat widget on the company's website and answers visitors 24/7. Together they handle 500+ questions a month, and 90% are resolved without a person stepping in.
 
 ## How it works
