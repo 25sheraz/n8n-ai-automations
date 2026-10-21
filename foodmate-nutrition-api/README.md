@@ -6,6 +6,8 @@ In testing, meal recognition and nutrient estimates were 90% accurate on clear p
 
 ## Endpoints
 
+![The calorie scan workflow in n8n](workflow.png)
+
 ```mermaid
 flowchart LR
     subgraph scan ["calorie-scan.json"]

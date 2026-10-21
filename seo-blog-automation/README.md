@@ -4,6 +4,8 @@ Publishes a researched, SEO-optimised blog post from a list of topics, with no m
 
 ## How it works
 
+![The SEO Blog Automation workflow in n8n](workflow.png)
+
 ```mermaid
 flowchart LR
     A["Schedule<br/>3 runs a day"] --> B[("Topic sheet<br/>ID, Topic, Status")]
